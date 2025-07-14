@@ -49,6 +49,12 @@ evt.onmessage = e => {
         .map(([k,v])=>k+'='+v).join(' ');
   document.getElementById('status').textContent = status;
 };
+
+const fmt = v => (v === null || v === undefined) ? '––' : v;
+['t1','t2','l1','l2'].forEach(k=>{
+  document.getElementById(k).textContent = fmt(d[k]);
+});
+
 </script>
 """
 
