@@ -98,8 +98,12 @@
  
    /* ── JSON back to Pi ── */
    StaticJsonDocument<128> out;
-   out["t1"]      = (t1 == DEVICE_DISCONNECTED_C) ? nullptr : t1;
-   out["t2"]      = (t2 == DEVICE_DISCONNECTED_C) ? nullptr : t2;
+   if (isnan(t1)) out["t1"] = nullptr;
+else           out["t1"] = t1;
+
+if (isnan(t2)) out["t2"] = nullptr;
+else           out["t2"] = t2;
+
    out["l1"]      = l1;
    out["l2"]      = l2;
    out["heater"]  = heater;

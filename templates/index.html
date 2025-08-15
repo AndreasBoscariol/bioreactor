@@ -1,0 +1,162 @@
+<!-- templates/index.html -->
+<!doctype html><title>Bio-reactor Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<style>
+  body  {font-family:sans-serif;max-width:800px;margin:auto;padding:1rem; background-color: #f4f4f9;}
+  .card {border:1px solid #ccc;padding:1.5rem;margin:1rem 0;border-radius:8px; background-color: #fff;}
+  .grid {display: grid; grid-template-columns: 2fr 3fr; gap: 1rem;}
+  button {margin:0.2rem;padding:0.4rem 0.8rem;border-radius:4px;border:1px solid #069;background-color:#fff;cursor:pointer;}
+  button:hover {background-color:#f0f0f0;}
+  canvas {max-width:100%;height:240px;margin-top:1rem;}
+  form label { display: inline-block; min-width: 220px; }
+  .status-text { color: #555; font-style: italic; font-size: 0.9em; }
+  #od-progress-container { background-color: #eef; border-left: 3px solid #069; padding: 0.5rem 1rem; margin-top: 1rem; }
+  ul#sensors li { margin-bottom: 0.25rem; }
+  
+  /* Flexbox for label/input alignment */
+  .automation-setting { display: flex; justify-content: space-between; align-items: center; }
+
+</style>
+
+<h1>Bio-reactor Dashboard</h1>
+
+<div class="grid">
+  <div class="card">
+    <h3>Sensors <small><a href="/download">📥 download csv</a></small></h3>
+    <ul id="sensors">
+      <li>Internal Temp: <b id="t1">--</b> °C</li>
+      <li>Heater Temp: <b id="t2">--</b> °C</li>
+      <hr style="margin-left: -1.2em;">
+      <li style="list-style-type: none; margin-left: -1.2em;"><small class="status-text" id="last_od_reading_ago">--</small></li>
+      <li>Optical Density: <b id="od">--</b></li>
+      <li>Photodiode 1: <b id="l1">--</b></li>
+      <li>Photodiode 2: <b id="l2">--</b></li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>Automation Settings</h3>
+    <form method="post" action="/set_automation">
+      <!-- --- THIS IS THE CORRECTED HTML STRUCTURE --- -->
+      <div class="automation-setting">
+        <label for="temp_setpoint">Temp Setpoint (°C):</label>
+        <input type="number" step="0.1" name="temp_setpoint" value="{{ setpoints.temperature }}" style="width: 80px;" oninput="handleSettingsChange()">
+      </div>
+      
+      <div class="automation-setting" style="margin-top: 0.5rem;">
+        <label for="light_cycle_hours">Light Cycle (hours ON / day):</label>
+        <input type="number" step="1" name="light_cycle_hours" value="{{ setpoints.light_cycle_hours }}" style="width: 80px;" oninput="handleSettingsChange()">
+      </div>
+      <small class="status-text" id="light_cycle_status">--</small>
+
+      <div class="automation-setting" style="margin-top: 0.5rem;">
+        <label for="dilution_percent">Dilution Rate (% per Day):</label>
+        <input type="number" step="0.1" name="dilution_percent" value="{{ setpoints.dilution_percent }}" style="width: 80px;" oninput="handleSettingsChange()">
+      </div>
+      <small class="status-text" id="dilution_status">--</small>
+
+      <div class="automation-setting" style="margin-top: 0.5rem;">
+        <label for="od_interval_hours">Measure OD every (hours):</label>
+        <input type="number" step="0.5" name="od_interval_hours" value="{{ setpoints.od_interval_hours }}" style="width: 80px;" oninput="handleSettingsChange()">
+      </div>
+      <small class="status-text" id="od_status">--</small>
+
+      <div class="automation-setting" style="margin-top: 0.5rem;">
+        <label for="aerator_interval_hours">Aerate every (hours):</label>
+        <input type="number" step="0.5" name="aerator_interval_hours" value="{{ setpoints.aerator_interval_hours }}" style="width: 80px;" oninput="handleSettingsChange()">
+      </div>
+      <small class="status-text" id="aerator_status">--</small>
+      
+      <br>
+      <button type="submit" id="update-resume-button">Resume Automation</button>
+    </form>
+  </div>
+</div>
+<div class="card">
+  <h3>Manual Controls</h3>
+  <form method="post" action="/toggle">
+      <button name="act" value="heater">Heater</button><button name="act" value="stir">Stir</button><button name="act" value="lights">Lights</button>
+      <button name="act" value="aerator">Aerator</button><button name="act" value="pump1">Pump 1</button><button name="act" value="pump2">Pump 2</button>
+      <button name="act" value="irled">IR LED</button>
+  </form>
+  <form method="post" action="/trigger_od" style="display:inline;"><button type="submit">Trigger OD Reading Now</button></form>
+  <div id="od-progress-container" style="display: none;"><p><b>OD Sequence Progress:</b> <span id="od_sequence_step"></span></p></div>
+  <p><small>Status: <code id="status"></code></small></p>
+</div>
+<div class="card">
+    <h3>Charts</h3>
+    <canvas id="odChart"></canvas>
+    <canvas id="tempChart"></canvas>
+</div>
+
+<script>
+function handleSettingsChange() {
+    document.getElementById('update-resume-button').textContent = 'Update and Resume Automation';
+}
+
+const fmt = v => (v===null || v===undefined) ? '--' : v;
+const odCtx = document.getElementById('odChart').getContext('2d');
+const tCtx = document.getElementById('tempChart').getContext('2d');
+const makeSeries = (label, color) => ({
+  label, data: [], borderColor: color, backgroundColor: color,
+  parsing: false, pointRadius: 2, tension: 0.1, borderWidth: 2, spanGaps: true
+});
+
+let odChart = new Chart(odCtx,{ type:'line', data:{ datasets:[makeSeries('OD', '#90c')] }, options:{ animation:false, scales:{ x:{type:'time', time:{unit:'minute'}}, y:{title:{display:true,text:'Optical Density'}} } } });
+let tempChart = new Chart(tCtx,{ type:'line', data:{ datasets:[makeSeries('Internal', '#069'), makeSeries('Heater', '#f60')] }, options:{ animation:false, scales:{ x:{type:'time', time:{unit:'minute'}}, y:{title:{display:true,text:'°C'}} } } });
+
+window.addEventListener('load', () => {
+    fetch('/history')
+        .then(response => response.json())
+        .then(history => {
+            if (history.t1) tempChart.data.datasets[0].data = history.t1;
+            if (history.t2) tempChart.data.datasets[1].data = history.t2;
+            if (history.od) odChart.data.datasets[0].data = history.od;
+            tempChart.update('none');
+            odChart.update('none');
+        })
+        .catch(error => console.error('Error fetching chart history:', error));
+});
+
+const evt = new EventSource('/stream');
+evt.onmessage = ev => {
+  const d = JSON.parse(ev.data);
+  const ids_to_update = [
+    't1', 't2', 'od', 'l1', 'l2', 'light_cycle_status', 'dilution_status',
+    'od_status', 'last_od_reading_ago', 'aerator_status'
+  ];
+  ids_to_update.forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.textContent = fmt(d[k]);
+  });
+  
+  const odProgressContainer = document.getElementById('od-progress-container');
+  if (d.od_sequence_step) {
+    odProgressContainer.style.display = 'block';
+    document.getElementById('od_sequence_step').textContent = d.od_sequence_step;
+  } else {
+    odProgressContainer.style.display = 'none';
+  }
+  
+  const statusTxt = Object.entries(d)
+    .filter(([k]) => ['heater','stir','lights','aerator','pump1','pump2','irled'].includes(k))
+    .map(([k,v]) => k + '=' + v).join(' ');
+  document.getElementById('status').textContent = statusTxt;
+  
+  const now = Date.now();
+  const push = (chart, datasetIndex, value) => {
+      if (value === null || value === undefined) return;
+      const data = chart.data.datasets[datasetIndex].data;
+      data.push({x: now, y: value});
+      if (data.length > 2100) data.shift();
+  };
+
+  push(tempChart, 0, d.t1);
+  push(tempChart, 1, d.t2);
+  push(odChart, 0, d.od_for_graph);
+  
+  tempChart.update('none');
+  odChart.update('none');
+};
+</script>
+</html>
