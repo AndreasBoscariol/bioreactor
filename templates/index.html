@@ -10,7 +10,7 @@
   button:hover {background-color:#f0f0f0;}
   canvas {max-width:100%;height:240px;margin-top:1rem;}
   form label { display: inline-block; min-width: 220px; }
-  .status-text { color: #555; font-style: italic; font-size: 0.9em; }
+  .status-text { color: #555; font-style: italic; font-size: 0.9em; display: block; }
   #od-progress-container { background-color: #eef; border-left: 3px solid #069; padding: 0.5rem 1rem; margin-top: 1rem; }
   ul#sensors li { margin-bottom: 0.25rem; }
   
@@ -37,35 +37,42 @@
   <div class="card">
     <h3>Automation Settings</h3>
     <form method="post" action="/set_automation">
-      <!-- --- THIS IS THE CORRECTED HTML STRUCTURE --- -->
       <div class="automation-setting">
         <label for="temp_setpoint">Temp Setpoint (°C):</label>
         <input type="number" step="0.1" name="temp_setpoint" value="{{ setpoints.temperature }}" style="width: 80px;" oninput="handleSettingsChange()">
       </div>
       
       <div class="automation-setting" style="margin-top: 0.5rem;">
-        <label for="light_cycle_hours">Light Cycle (hours ON / day):</label>
+        <div>
+          <label for="light_cycle_hours">Light Cycle (hours ON / day):</label>
+          <small class="status-text" id="light_cycle_status">--</small>
+        </div>
         <input type="number" step="1" name="light_cycle_hours" value="{{ setpoints.light_cycle_hours }}" style="width: 80px;" oninput="handleSettingsChange()">
       </div>
-      <small class="status-text" id="light_cycle_status">--</small>
 
       <div class="automation-setting" style="margin-top: 0.5rem;">
-        <label for="dilution_percent">Dilution Rate (% per Day):</label>
+        <div>
+          <label for="dilution_percent">Dilution Rate (% per Day):</label>
+          <small class="status-text" id="dilution_status">--</small>
+        </div>
         <input type="number" step="0.1" name="dilution_percent" value="{{ setpoints.dilution_percent }}" style="width: 80px;" oninput="handleSettingsChange()">
       </div>
-      <small class="status-text" id="dilution_status">--</small>
 
       <div class="automation-setting" style="margin-top: 0.5rem;">
-        <label for="od_interval_hours">Measure OD every (hours):</label>
+        <div>
+          <label for="od_interval_hours">Measure OD every (hours):</label>
+          <small class="status-text" id="od_status">--</small>
+        </div>
         <input type="number" step="0.5" name="od_interval_hours" value="{{ setpoints.od_interval_hours }}" style="width: 80px;" oninput="handleSettingsChange()">
       </div>
-      <small class="status-text" id="od_status">--</small>
 
       <div class="automation-setting" style="margin-top: 0.5rem;">
-        <label for="aerator_interval_hours">Aerate every (hours):</label>
+        <div>
+          <label for="aerator_interval_hours">Aerate every (hours):</label>
+          <small class="status-text" id="aerator_status">--</small>
+        </div>
         <input type="number" step="0.5" name="aerator_interval_hours" value="{{ setpoints.aerator_interval_hours }}" style="width: 80px;" oninput="handleSettingsChange()">
       </div>
-      <small class="status-text" id="aerator_status">--</small>
       
       <br>
       <button type="submit" id="update-resume-button">Resume Automation</button>
@@ -82,6 +89,7 @@
   <form method="post" action="/trigger_od" style="display:inline;"><button type="submit">Trigger OD Reading Now</button></form>
   <div id="od-progress-container" style="display: none;"><p><b>OD Sequence Progress:</b> <span id="od_sequence_step"></span></p></div>
   <p><small>Status: <code id="status"></code></small></p>
+  <p><small>Script Started: <code id="script_start_time">--</code> (<span id="script_uptime">--</span> ago)</small></p>
 </div>
 <div class="card">
     <h3>Charts</h3>
@@ -123,7 +131,8 @@ evt.onmessage = ev => {
   const d = JSON.parse(ev.data);
   const ids_to_update = [
     't1', 't2', 'od', 'l1', 'l2', 'light_cycle_status', 'dilution_status',
-    'od_status', 'last_od_reading_ago', 'aerator_status'
+    'od_status', 'last_od_reading_ago', 'aerator_status', 'script_start_time',
+    'script_uptime'
   ];
   ids_to_update.forEach(k => {
     const el = document.getElementById(k);
